@@ -4,6 +4,7 @@ export default class Game extends Phaser.Scene {
   }
 
   init(data) {
+    // Temporal: iniciar directamente en nivel 3 para pruebas.
     this.currentLevel = data.level || 1;
     this.score = 0;
     this.totalScore = data.totalScore || 0;
@@ -14,6 +15,7 @@ export default class Game extends Phaser.Scene {
   preload() {
     this.load.tilemapTiledJSON("level1", "public/assets/tilemap/map.json");
     this.load.xml("level2tmx", "public/assets/tilemap/Nivel2.tmx");
+    this.load.xml("level3tmx", "public/assets/tilemap/Nivel3.tmx");
     this.load.image("tileset", "public/assets/texture.png");
     this.load.image("texture", "public/assets/texture.png");
     this.load.image("star", "public/assets/star.png");
@@ -28,11 +30,11 @@ export default class Game extends Phaser.Scene {
     const mapConfig = this.getLevelConfig(this.currentLevel);
     const map = this.currentLevel === 1
       ? this.make.tilemap({ key: "level1" })
-      : this.currentLevel === 2
-      ? this.makeLevel2Map()
+      : this.currentLevel === 2 || this.currentLevel === 3
+      ? this.makeTMXMap(this.currentLevel)
       : this.make.tilemap({ tileWidth: 24, tileHeight: 24, width: mapConfig.width, height: mapConfig.height });
 
-    const tilesetKey = this.currentLevel === 2 ? "texture" : "tileset";
+    const tilesetKey = this.currentLevel === 1 ? "tileset" : "texture";
     const tileset = map.addTilesetImage(tilesetKey, tilesetKey);
 
     let belowLayer;
@@ -41,11 +43,11 @@ export default class Game extends Phaser.Scene {
     if (this.currentLevel === 1) {
       belowLayer = map.createLayer("Fondo", tileset, 0, 0);
       platformLayer = map.createLayer("Plataformas", tileset, 0, 0);
-    } else if (this.currentLevel === 2) {
+    } else if (this.currentLevel === 2 || this.currentLevel === 3) {
       belowLayer = map.createBlankLayer("Fondo", tileset, 0, 0);
       platformLayer = map.createBlankLayer("Plataformas", tileset, 0, 0);
-      belowLayer.putTilesAt(this.parseLevel2Layer("Fondo"), 0, 0);
-      platformLayer.putTilesAt(this.parseLevel2Layer("Plataformas"), 0, 0);
+      belowLayer.putTilesAt(this.parseTMXLayer(this.currentLevel, "Fondo"), 0, 0);
+      platformLayer.putTilesAt(this.parseTMXLayer(this.currentLevel, "Plataformas"), 0, 0);
     } else {
       belowLayer = map.createBlankLayer("Fondo", tileset, 0, 0);
       platformLayer = map.createBlankLayer("Plataformas", tileset, 0, 0);
@@ -56,8 +58,8 @@ export default class Game extends Phaser.Scene {
     if (this.currentLevel === 1) {
       platformLayer.setCollisionByProperty({ esColisionable: true });
       platformLayer.setCollision([828]);
-    } else if (this.currentLevel === 2) {
-      platformLayer.setCollision([835]);
+    } else if (this.currentLevel === 2 || this.currentLevel === 3) {
+      platformLayer.setCollisionByExclusion([0]);
     } else {
       platformLayer.setCollisionByProperty({ esColisionable: true });
       platformLayer.setCollision([828]);
@@ -65,8 +67,8 @@ export default class Game extends Phaser.Scene {
 
     const objects = this.currentLevel === 1
       ? map.getObjectLayer("Objetos").objects
-      : this.currentLevel === 2
-      ? this.parseLevel2Objects()
+      : this.currentLevel === 2 || this.currentLevel === 3
+      ? this.parseTMXObjects(this.currentLevel)
       : mapConfig.objects;
 
     const spawnPoint = objects.find((obj) => obj.name === "player");
@@ -190,14 +192,13 @@ export default class Game extends Phaser.Scene {
   }
 
   createHUD() {
-    this.levelText = this.add.text(16, 16, "", { fontSize: "24px", fill: "#ffffff", backgroundColor: "rgba(0,0,0,0.5)" });
-    this.scoreText = this.add.text(16, 46, "", { fontSize: "24px", fill: "#ffffff", backgroundColor: "rgba(0,0,0,0.5)" });
-    this.totalText = this.add.text(16, 76, "", { fontSize: "24px", fill: "#ffffff", backgroundColor: "rgba(0,0,0,0.5)" });
-    this.goalText = this.add.text(16, 106, "", { fontSize: "24px", fill: "#ffffff", backgroundColor: "rgba(0,0,0,0.5)" });
-    this.messageText = this.add.text(16, 140, "", { fontSize: "24px", fill: "#ffff00", backgroundColor: "rgba(0,0,0,0.5)" });
+    const style = { fontSize: "24px", fill: "#ffffff", backgroundColor: "rgba(0,0,0,0.5)" };
+    this.levelText = this.add.text(16, 5, "", style);
+    this.totalText = this.add.text(160, 5, "", style);
+    this.goalText = this.add.text(420, 5, "", style);
+    this.messageText = this.add.text(16, 52, "", { fontSize: "24px", fill: "#ffff00", backgroundColor: "rgba(0,0,0,0.5)" });
 
     this.levelText.setScrollFactor(0);
-    this.scoreText.setScrollFactor(0);
     this.totalText.setScrollFactor(0);
     this.goalText.setScrollFactor(0);
     this.messageText.setScrollFactor(0);
@@ -205,7 +206,6 @@ export default class Game extends Phaser.Scene {
 
   updateHUD() {
     this.levelText.setText(`Nivel: ${this.currentLevel}`);
-    this.scoreText.setText(`Puntaje nivel: ${this.score}`);
     this.totalText.setText(`Puntaje total: ${this.totalScore}`);
     this.goalText.setText(`Recolectados: ${this.starsCollected}/${this.requiredStars}`);
   }
@@ -298,8 +298,8 @@ export default class Game extends Phaser.Scene {
     return data;
   }
 
-  makeLevel2Map() {
-    const xml = this.cache.xml.get("level2tmx");
+  makeTMXMap(level) {
+    const xml = this.cache.xml.get(`level${level}tmx`);
     const mapElement = xml.documentElement;
     const width = parseInt(mapElement.getAttribute("width"), 10);
     const height = parseInt(mapElement.getAttribute("height"), 10);
@@ -308,8 +308,8 @@ export default class Game extends Phaser.Scene {
     return this.make.tilemap({ width, height, tileWidth, tileHeight });
   }
 
-  parseLevel2Layer(name) {
-    const xml = this.cache.xml.get("level2tmx");
+  parseTMXLayer(level, name) {
+    const xml = this.cache.xml.get(`level${level}tmx`);
     const layer = xml.querySelector(`layer[name='${name}']`);
     const width = parseInt(layer.getAttribute("width"), 10);
     const csv = layer
@@ -326,8 +326,8 @@ export default class Game extends Phaser.Scene {
     return rows;
   }
 
-  parseLevel2Objects() {
-    const xml = this.cache.xml.get("level2tmx");
+  parseTMXObjects(level) {
+    const xml = this.cache.xml.get(`level${level}tmx`);
     const objects = [];
     xml.querySelectorAll("objectgroup[name='Objetos'] object").forEach((obj) => {
       objects.push({
