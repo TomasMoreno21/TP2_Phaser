@@ -13,7 +13,9 @@ export default class Game extends Phaser.Scene {
 
   preload() {
     this.load.tilemapTiledJSON("level1", "public/assets/tilemap/map.json");
+    this.load.xml("level2tmx", "public/assets/tilemap/Nivel2.tmx");
     this.load.image("tileset", "public/assets/texture.png");
+    this.load.image("texture", "public/assets/texture.png");
     this.load.image("star", "public/assets/star.png");
     this.load.image("goal", "public/assets/bomb.png");
     this.load.spritesheet("dude", "./public/assets/dude.png", {
@@ -26,9 +28,12 @@ export default class Game extends Phaser.Scene {
     const mapConfig = this.getLevelConfig(this.currentLevel);
     const map = this.currentLevel === 1
       ? this.make.tilemap({ key: "level1" })
+      : this.currentLevel === 2
+      ? this.makeLevel2Map()
       : this.make.tilemap({ tileWidth: 24, tileHeight: 24, width: mapConfig.width, height: mapConfig.height });
 
-    const tileset = map.addTilesetImage("tileset", "tileset");
+    const tilesetKey = this.currentLevel === 2 ? "texture" : "tileset";
+    const tileset = map.addTilesetImage(tilesetKey, tilesetKey);
 
     let belowLayer;
     let platformLayer;
@@ -36,6 +41,11 @@ export default class Game extends Phaser.Scene {
     if (this.currentLevel === 1) {
       belowLayer = map.createLayer("Fondo", tileset, 0, 0);
       platformLayer = map.createLayer("Plataformas", tileset, 0, 0);
+    } else if (this.currentLevel === 2) {
+      belowLayer = map.createBlankLayer("Fondo", tileset, 0, 0);
+      platformLayer = map.createBlankLayer("Plataformas", tileset, 0, 0);
+      belowLayer.putTilesAt(this.parseLevel2Layer("Fondo"), 0, 0);
+      platformLayer.putTilesAt(this.parseLevel2Layer("Plataformas"), 0, 0);
     } else {
       belowLayer = map.createBlankLayer("Fondo", tileset, 0, 0);
       platformLayer = map.createBlankLayer("Plataformas", tileset, 0, 0);
@@ -43,11 +53,20 @@ export default class Game extends Phaser.Scene {
       platformLayer.putTilesAt(platformData, 0, 0);
     }
 
-    platformLayer.setCollisionByProperty({ esColisionable: true });
-    platformLayer.setCollision([828]);
+    if (this.currentLevel === 1) {
+      platformLayer.setCollisionByProperty({ esColisionable: true });
+      platformLayer.setCollision([828]);
+    } else if (this.currentLevel === 2) {
+      platformLayer.setCollision([835]);
+    } else {
+      platformLayer.setCollisionByProperty({ esColisionable: true });
+      platformLayer.setCollision([828]);
+    }
 
     const objects = this.currentLevel === 1
       ? map.getObjectLayer("Objetos").objects
+      : this.currentLevel === 2
+      ? this.parseLevel2Objects()
       : mapConfig.objects;
 
     const spawnPoint = objects.find((obj) => obj.name === "player");
@@ -277,6 +296,48 @@ export default class Game extends Phaser.Scene {
       }
     });
     return data;
+  }
+
+  makeLevel2Map() {
+    const xml = this.cache.xml.get("level2tmx");
+    const mapElement = xml.documentElement;
+    const width = parseInt(mapElement.getAttribute("width"), 10);
+    const height = parseInt(mapElement.getAttribute("height"), 10);
+    const tileWidth = parseInt(mapElement.getAttribute("tilewidth"), 10);
+    const tileHeight = parseInt(mapElement.getAttribute("tileheight"), 10);
+    return this.make.tilemap({ width, height, tileWidth, tileHeight });
+  }
+
+  parseLevel2Layer(name) {
+    const xml = this.cache.xml.get("level2tmx");
+    const layer = xml.querySelector(`layer[name='${name}']`);
+    const width = parseInt(layer.getAttribute("width"), 10);
+    const csv = layer
+      .querySelector("data")
+      .textContent.trim()
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .map((value) => parseInt(value, 10));
+    const rows = [];
+    for (let i = 0; i < csv.length; i += width) {
+      rows.push(csv.slice(i, i + width));
+    }
+    return rows;
+  }
+
+  parseLevel2Objects() {
+    const xml = this.cache.xml.get("level2tmx");
+    const objects = [];
+    xml.querySelectorAll("objectgroup[name='Objetos'] object").forEach((obj) => {
+      objects.push({
+        x: parseFloat(obj.getAttribute("x")) || 0,
+        y: parseFloat(obj.getAttribute("y")) || 0,
+        type: obj.getAttribute("type") || "",
+        name: obj.getAttribute("name") || "",
+      });
+    });
+    return objects;
   }
 
   get levelConfig() {
